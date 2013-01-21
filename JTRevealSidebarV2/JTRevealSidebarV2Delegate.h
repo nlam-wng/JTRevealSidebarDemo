@@ -15,5 +15,6 @@
 - (UIView *)viewForRightSidebar;
 - (void)willChangeRevealedStateForViewController:(UIViewController *)viewController;
 - (void)didChangeRevealedStateForViewController:(UIViewController *)viewController;
+- (void) styleViewController: (UIViewController *) viewController revealed: (BOOL) revealed;
 
 @end

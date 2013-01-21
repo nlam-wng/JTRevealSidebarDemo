@@ -27,6 +27,9 @@ typedef enum {
 // Handy method for toggling between "opening" and JTRevealedStateNo
 - (void)toggleRevealState:(JTRevealedState)openingState;
 
+- (void) resetRevealedStateView;
+- (void) setupRevealedState: (JTRevealedState) state;
+
 @end
 
 

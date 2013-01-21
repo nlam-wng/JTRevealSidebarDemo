@@ -11,11 +11,14 @@
 #import "JTRevealSidebarV2Delegate.h"
 #import <objc/runtime.h>
 
+#define SIDEBAR_VIEW_TAG 10000
+
 @interface UIViewController (JTRevealSidebarV2Private)
 
 - (UIViewController *)selectedViewController;
 - (void)revealLeftSidebar:(BOOL)showLeftSidebar;
 - (void)revealRightSidebar:(BOOL)showRightSidebar;
+- (void) styleSelectedViewController: (BOOL) enabled;
 
 @end
 
@@ -76,6 +79,7 @@ static char *revealedStateKey;
     return (JTRevealedState)[objc_getAssociatedObject(self, &revealedStateKey) intValue];
 }
 
+
 - (CGAffineTransform)baseTransform {
     CGAffineTransform baseTransform;
     
@@ -111,26 +115,82 @@ static char *revealedStateKey;
     }
     [self setRevealedState:state];
 }
+- (void) resetRevealedStateView {
+    id <JTRevealSidebarV2Delegate> delegate = [self selectedViewController].navigationItem.revealSidebarDelegate;
+    
+    if (! [delegate respondsToSelector:@selector(viewForLeftSidebar)]) {
+        return;
+    }
+    
+    UIView *revealedView = [delegate viewForLeftSidebar];
+    CGFloat width = CGRectGetWidth(revealedView.frame);
+    
+    if (self.revealedState == JTRevealedStateLeft) {
+        [self styleSelectedViewController:NO];
+        [UIView beginAnimations:@"styleSelectedViewController" context:nil];
+        //        self.view.transform = CGAffineTransformTranslate([self baseTransform], width, 0);
+        self.view.frame = (CGRect) {CGPointMake(width, 0), self.view.frame.size};
+        [UIView setAnimationDidStopSelector:@selector(resetAnimationDidStop:finished:context:)];
+        
+        
+    } else if (self.revealedState == JTRevealedStateNo) {
+        [self styleSelectedViewController:NO];
+        [UIView beginAnimations:@"" context:nil];
+        //        self.view.transform = CGAffineTransformTranslate([self baseTransform], -width, 0);
+        self.view.frame = (CGRect){CGPointZero, self.view.frame.size};
+    } else {
+        // Not supported
+        return;
+    }
+    [UIView setAnimationDuration:0.1f];
+    [UIView setAnimationCurve:UIViewAnimationCurveLinear];
+    [UIView setAnimationDelegate:self];
+    
+    //NSLog(@"%@", NSStringFromCGAffineTransform(self.view.transform));
+    
+    
+    [UIView commitAnimations];
+}
+- (void) setupRevealedState: (JTRevealedState) state {
+    if (self.revealedState != JTRevealedStateNo) {
+        // not supported
+        return;
+    }
+    switch (state) {
+        case JTRevealedStateLeft: 
+        {
+            id <JTRevealSidebarV2Delegate> delegate = [self selectedViewController].navigationItem.revealSidebarDelegate;
+            
+            if ( ! [delegate respondsToSelector:@selector(viewForLeftSidebar)]) {
+                return;
+            }
+            
+            UIView *revealedView = [delegate viewForLeftSidebar];
+            revealedView.tag = SIDEBAR_VIEW_TAG;
+            
+            [self.view.superview insertSubview:revealedView belowSubview:self.view];
+            [self styleSelectedViewController:YES];
+            
+            break;
+        }
+        default:
+            // not supported
+            break;
+    }
+}
 
 @end
 
-#define SIDEBAR_VIEW_TAG 10000
 
 @implementation UIViewController (JTRevealSidebarV2Private)
 
 - (UIViewController *)selectedViewController {
     return self;
 }
-
-// Looks like we collasped with the official animationDidStop:finished:context: 
-// implementation in the default UITabBarController here, that makes us never
-// getting the callback we wanted. So we renamed the callback method here.
 - (void)animationDidStop2:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context {
     if ([animationID isEqualToString:@"hideSidebarView"]) {
-        // Remove the sidebar view after the sidebar closes.
-        UIView *view = [self.view.superview viewWithTag:(int)context];
-        [view removeFromSuperview];
-    }
+        [self styleSelectedViewController:YES];
+    } 
     
     // notify delegate for controller changed state
     id <JTRevealSidebarV2Delegate> delegate = 
@@ -140,14 +200,28 @@ static char *revealedStateKey;
     }
 }
 
+- (void)resetAnimationDidStop:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context {
+    [self styleSelectedViewController:YES];
+//    [self performSelectorOnMainThread:@selector(styleSelectedViewController:) withObject:[NSNumber numberWithBool:YES] waitUntilDone:NO];
+}
+
+// Add styling to the selected view controller
+- (void) styleSelectedViewController: (BOOL) revealed {
+    id <JTRevealSidebarV2Delegate> delegate =
+    [self selectedViewController].navigationItem.revealSidebarDelegate;
+    if ([delegate respondsToSelector:@selector(styleViewController:revealed:)]) {
+        [delegate styleViewController:self revealed: revealed];
+    }
+}
+
 - (void)revealLeftSidebar:(BOOL)showLeftSidebar {
+//    NSLog(@"revealLeftSidebar: reveal = %d", showLeftSidebar);
 
     id <JTRevealSidebarV2Delegate> delegate = [self selectedViewController].navigationItem.revealSidebarDelegate;
 
-    if ( ! [delegate respondsToSelector:@selector(viewForLeftSidebar)]) {
+    if (! [delegate respondsToSelector:@selector(viewForLeftSidebar)]) {
         return;
     }
-
     UIView *revealedView = [delegate viewForLeftSidebar];
     revealedView.tag = SIDEBAR_VIEW_TAG;
     CGFloat width = CGRectGetWidth(revealedView.frame);
@@ -158,19 +232,23 @@ static char *revealedStateKey;
         [UIView beginAnimations:@"" context:nil];
 //        self.view.transform = CGAffineTransformTranslate([self baseTransform], width, 0);
         
-        self.view.frame = CGRectOffset(self.view.frame, width, 0);
+//        self.view.frame = CGRectOffset(self.view.frame, width, 0);
+        self.view.frame = (CGRect) {CGPointMake(width, 0), self.view.frame.size};
 
+        [self styleSelectedViewController:YES];
+        
     } else {
+        [self styleSelectedViewController:NO];
         [UIView beginAnimations:@"hideSidebarView" context:(void *)SIDEBAR_VIEW_TAG];
 //        self.view.transform = CGAffineTransformTranslate([self baseTransform], -width, 0);
         
-        self.view.frame = CGRectOffset(self.view.frame, -width, 0);
+        self.view.frame = (CGRect){CGPointZero, self.view.frame.size};
     }
-    
+    [UIView setAnimationCurve:UIViewAnimationCurveEaseOut];
     [UIView setAnimationDidStopSelector:@selector(animationDidStop2:finished:context:)];
     [UIView setAnimationDelegate:self];
     
-    NSLog(@"%@", NSStringFromCGAffineTransform(self.view.transform));
+    //NSLog(@"%@", NSStringFromCGAffineTransform(self.view.transform));
 
 
     [UIView commitAnimations];
@@ -199,13 +277,13 @@ static char *revealedStateKey;
     } else {
         [UIView beginAnimations:@"hideSidebarView" context:(void *)SIDEBAR_VIEW_TAG];
 //        self.view.transform = CGAffineTransformTranslate([self baseTransform], width, 0);
-        self.view.frame = CGRectOffset(self.view.frame, width, 0);
+        self.view.frame = (CGRect){CGPointZero, self.view.frame.size};        
     }
     
     [UIView setAnimationDidStopSelector:@selector(animationDidStop2:finished:context:)];
     [UIView setAnimationDelegate:self];
 
-    NSLog(@"%@", NSStringFromCGAffineTransform(self.view.transform));
+//    NSLog(@"%@", NSStringFromCGAffineTransform(self.view.transform));
     
     [UIView commitAnimations];
 }
